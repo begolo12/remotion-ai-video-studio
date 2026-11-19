@@ -125,8 +125,8 @@ const ProgressBar: React.FC<{ design: Design; progress: number }> = ({ design, p
  * - Player di browser: lewat `/api/audio/...`
  */
 const sceneAudioSrc = (src: string): string => {
-  // Audio hasil TTS cloud disimpan di Vercel Blob dan sudah berupa URL publik.
-  if (/^https?:\/\//i.test(src)) return src;
+  // Audio bisa berupa URL absolut (Blob/proxy) atau data URL hasil embed sandbox.
+  if (/^https?:\/\//i.test(src) || src.startsWith("data:")) return src;
   const clean = src.replace(/^\//, "");
   if (getRemotionEnvironment().isRendering) return staticFile(clean);
   return `/api/${clean}`;

@@ -16,7 +16,7 @@ Next.js 16 di Vercel (region sin1)
         │
         ├── InferHub .......... cx/gpt-6.2-sol
         ├── Neon Postgres ..... aws-ap-southeast-1
-        ├── Vercel Blob ....... audio, asset, MP4
+        ├── Storage lokal ..... audio, asset, MP4
         └── Vercel Sandbox .... render Remotion
 ```
 
@@ -24,7 +24,7 @@ Prinsip penting:
 
 - API key tidak pernah dikirim ke browser.
 - Project dan job disimpan di Neon, bukan filesystem Vercel.
-- Audio TTS dan MP4 disimpan di Vercel Blob.
+- Audio TTS, aset, dan MP4 disimpan di disk lokal (`STORAGE_DIR`). Di Vercel runtime memakai `/tmp`, jadi file tidak persisten antar-instance.
 - Render berjalan detached di Vercel Sandbox, lalu di-polling.
 - AI hanya menghasilkan JSON; Remotion tidak menjalankan kode dari AI.
 
@@ -91,7 +91,7 @@ INFERHUB_BASE_URL
 INFERHUB_MODEL
 INFERHUB_API_KEY
 AUTH_SECRET
-BLOB_READ_WRITE_TOKEN
+STORAGE_DIR
 CRON_SECRET
 RENDER_SERVE_URL
 ```

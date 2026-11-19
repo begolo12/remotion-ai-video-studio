@@ -12,7 +12,7 @@ export const env = {
   inferhubFallbackModel: process.env.INFERHUB_FALLBACK_MODEL ?? "",
   inferhubApiKey: process.env.INFERHUB_API_KEY ?? "",
   authSecret: process.env.AUTH_SECRET ?? "",
-  blobReadWriteToken: process.env.BLOB_READ_WRITE_TOKEN ?? "",
+  storageDir: process.env.STORAGE_DIR ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
 };
 

@@ -9,7 +9,7 @@ Next.js 16 (Vercel, Singapore)
   ├── Auth + workspace
   ├── Studio UI + Remotion Player
   ├── Neon Postgres (aws-ap-southeast-1)
-  ├── Vercel Blob (audio, aset, MP4)
+  ├── Storage lokal (audio, aset, MP4)
   ├── InferHub (cx/gpt-6.2-sol)
   └── Vercel Sandbox (render Remotion)
 ```
@@ -61,7 +61,7 @@ Buka `http://localhost:3000`, daftar akun, lalu buat video.
 | `INFERHUB_FALLBACK_MODEL` | Tidak | Model cadangan |
 | `INFERHUB_API_KEY` | Ya | Server-side saja |
 | `AUTH_SECRET` | Ya | HMAC session |
-| `BLOB_READ_WRITE_TOKEN` | Ya | Audio, aset, dan MP4 |
+| `STORAGE_DIR` | Tidak | Folder file lokal; default `public/` (dev) atau `/tmp` (Vercel) |
 | `CRON_SECRET` | Ya | Melindungi `/api/cron/*` |
 | `RENDER_SERVE_URL` | Ya | URL deployment untuk render |
 | `REMOTION_BUNDLE_DIR` | Tidak | Default `.remotion/bundle` |
@@ -89,13 +89,13 @@ Prompt user
   → /api/generate
   → InferHub menghasilkan JSON storyboard
   → Zod validasi → VideoPlan v2
-  → TTS cloud → MP3 di Vercel Blob + word timing
+  → TTS → MP3 di storage lokal + word timing
   → Neon: project + revision 1
   → UI: Player + editor storyboard
   → PATCH /api/projects/:id/storyboard → revision baru
   → POST /api/projects/:id/review → quality issue
   → POST /api/render → job queued → Vercel Sandbox
-  → polling /api/render/:jobId → MP4 di Vercel Blob
+  → polling /api/render/:jobId → MP4 di storage lokal
 ```
 
 ## API utama
@@ -128,6 +128,7 @@ Prompt user
 ## Batasan yang perlu diketahui
 
 - Render membutuhkan Vercel Sandbox dan bundle Remotion yang dihasilkan `postbuild`.
+- File disimpan lokal. Di Vercel runtime memakai `/tmp`, jadi MP4/audio tidak persisten antar-instance; untuk produksi multi-instance sebaiknya gunakan storage objek.
 - Generator gambar/video belum terhubung; visual memakai ilustrasi SVG bawaan. Ajukan provider jika ingin aset generatif.
 - TTS bergantung pada ketersediaan Edge TTS dan jaringan.
 - Model `cx/gpt-6.2-sol` harus tersedia di akun InferHub Anda.
@@ -141,7 +142,7 @@ src/lib/db/          Drizzle schema, client, migrasi
 src/lib/auth/        Password, session, akses workspace
 src/lib/jobs/        Antrean render persisten
 src/lib/render/      Vercel Sandbox + checklist
-src/lib/storage/     Vercel Blob
+src/lib/storage/     Storage file lokal (STORAGE_DIR)
 src/lib/audio/       TTS cloud
 src/lib/projects/    Service project + revisi
 src/video/           Komponen Remotion

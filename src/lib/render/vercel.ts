@@ -3,37 +3,39 @@ import path from "node:path";
 import { Sandbox } from "@vercel/sandbox";
 import { addBundleToSandbox, createSandbox, renderMediaOnVercel } from "@remotion/vercel";
 import type { VideoPlan } from "@/lib/plan/schema";
+import { normalizeKey, putObject, storageRoot, type StoredObject } from "@/lib/storage/blob";
 
 export type RenderHandle = { sandboxId: string; commandId: string; outputFile: string };
 export type RenderProgressInfo = { progress: number; done: boolean; error?: string };
 
-function blobToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "BLOB_READ_WRITE_TOKEN belum diset, sehingga MP4 tidak bisa diunggah ke Vercel Blob.",
-    );
-  }
-  return token;
+function localRenderKey(jobId: string): string {
+  return `renders/${jobId}.mp4`;
 }
 
-function safePrefix(prefix: string | undefined, jobId: string): string {
-  if (!prefix) return `renders/${jobId}.mp4`;
-  const cleaned = prefix
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9/_-]+/g, "-")
-    .replace(/\/{2,}/g, "/")
-    .replace(/^\/+|\/+$/g, "");
-  return cleaned ? `${cleaned}/${jobId}.mp4` : `renders/${jobId}.mp4`;
-}
-
-function blobAccess(): "public" | "private" {
-  const access = process.env.RENDER_BLOB_ACCESS ?? "public";
-  if (access !== "public" && access !== "private") {
-    throw new Error("RENDER_BLOB_ACCESS harus 'public' atau 'private'");
-  }
-  return access;
+/**
+ * Sandbox render tidak punya akses ke file lokal aplikasi. Narasi disisipkan
+ * sebagai data URL agar `<Audio>` tetap bisa diputar tanpa Vercel Blob.
+ */
+async function withEmbeddedAudio(plan: VideoPlan): Promise<VideoPlan> {
+  const scenes = await Promise.all(
+    plan.scenes.map(async (scene) => {
+      if (!scene.audio?.src?.startsWith("/audio/")) return scene;
+      const file = path.join(storageRoot(), ...normalizeKey(scene.audio.src.slice(1)).split("/"));
+      try {
+        const buffer = await fs.readFile(file);
+        return {
+          ...scene,
+          audio: {
+            ...scene.audio,
+            src: `data:audio/mpeg;base64,${buffer.toString("base64")}`,
+          },
+        };
+      } catch {
+        return scene;
+      }
+    }),
+  );
+  return { ...plan, scenes };
 }
 
 async function bundleDir(): Promise<string> {
@@ -81,10 +83,10 @@ export async function startSandboxRender(input: {
     throw new Error("plan wajib diisi");
   }
 
-  const token = blobToken();
   const dir = await bundleDir();
+  const plan = await withEmbeddedAudio(input.plan);
   const compositionId = process.env.REMOTION_COMPOSITION_ID || "ShortVideo";
-  const blobPath = safePrefix(input.blobPathPrefix, input.jobId);
+  void input.blobPathPrefix;
   const timeout = process.env.RENDER_SANDBOX_TIMEOUT_MS
     ? Number(process.env.RENDER_SANDBOX_TIMEOUT_MS)
     : undefined;
@@ -99,11 +101,13 @@ export async function startSandboxRender(input: {
     await sandbox.mkDir("remotion-bundle");
     await addBundleToSandbox({ sandbox, bundleDir: dir });
 
+    // @ts-expect-error Tipe @remotion/vercel mengharuskan vercelBlob untuk mode
+    // detached, tetapi runtime menerima null dan MP4 diambil manual dari sandbox.
     const result = await renderMediaOnVercel({
       sandbox,
       compositionId,
       inputProps: {
-        plan: input.plan,
+        plan,
         serveUrl: input.serveUrl,
         jobId: input.jobId,
         projectId: input.projectId,
@@ -111,7 +115,6 @@ export async function startSandboxRender(input: {
       codec: "h264",
       crf: 18,
       detached: true,
-      vercelBlob: { blobToken: token, access: blobAccess(), blobPath },
       ...(timeout !== undefined ? { detachedSandboxTimeoutInMilliseconds: timeout } : {}),
     });
 
@@ -198,4 +201,34 @@ export async function getSandboxRenderProgress(
     return { progress: percent, done: true, error: payload.message ?? "Render gagal" };
   }
   return { progress: percent, done: false };
+}
+
+/**
+ * Ambil MP4 dari sandbox setelah render selesai lalu simpan ke storage lokal.
+ * Dipanggil sekali oleh route polling saat status berubah menjadi `done`.
+ */
+export async function saveRenderedVideo(
+  handle: RenderHandle,
+  jobId: string,
+): Promise<StoredObject> {
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.get({ name: handle.sandboxId });
+  } catch {
+    throw new Error("Sandbox render sudah kedaluwarsa sebelum MP4 diambil");
+  }
+
+  const buffer = await sandbox
+    .readFileToBuffer({ path: handle.outputFile || "/tmp/video.mp4" })
+    .catch(() => null);
+  if (!buffer || buffer.byteLength < 1024) {
+    throw new Error("MP4 hasil render tidak ditemukan di sandbox");
+  }
+
+  return putObject({
+    data: buffer,
+    filename: localRenderKey(jobId),
+    contentType: "video/mp4",
+    access: "public",
+  });
 }

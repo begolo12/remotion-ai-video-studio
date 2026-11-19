@@ -18,7 +18,6 @@
     "@remotion/google-fonts": "^4.0.545",
     "@remotion/player": "^4.0.545",
     "@remotion/vercel": "^4.0.545",
-    "@vercel/blob": "^2.9.0",
     "@vercel/functions": "^3.11.3",
     "drizzle-orm": "^0.45.4",
     "msedge-tts": "^2.1.1",

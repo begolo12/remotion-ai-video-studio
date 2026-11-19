@@ -2,8 +2,7 @@ import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+import { storageRoot } from "@/lib/storage/blob";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -33,8 +32,9 @@ export const servePublicFile = async (
     return NextResponse.json({ error: "Path tidak valid" }, { status: 400 });
   }
 
-  const filePath = path.join(PUBLIC_DIR, relative);
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  const root = storageRoot();
+  const filePath = path.join(root, relative);
+  if (!filePath.startsWith(root)) {
     return NextResponse.json({ error: "Path tidak valid" }, { status: 400 });
   }
 
