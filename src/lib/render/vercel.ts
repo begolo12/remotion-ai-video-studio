@@ -1,11 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import {
-  addBundleToSandbox,
-  createSandbox,
-  getRenderProgress,
-  renderMediaOnVercel,
-} from "@remotion/vercel";
+import { Sandbox } from "@vercel/sandbox";
+import { addBundleToSandbox, createSandbox, renderMediaOnVercel } from "@remotion/vercel";
 import type { VideoPlan } from "@/lib/plan/schema";
 
 export type RenderHandle = { sandboxId: string; commandId: string; outputFile: string };
@@ -122,12 +118,15 @@ export async function startSandboxRender(input: {
     const rawSandbox = sandbox as unknown as {
       sessionId?: string;
       session?: { sessionId?: string };
-      sandbox?: { id?: string };
+      sandbox?: { name?: string; id?: string };
     };
+    // `getRenderProgress` dari @remotion/vercel memanggil Sandbox.get({sandboxId}),
+    // tetapi versi @vercel/sandbox yang terpasang mengharapkan `name`. Simpan
+    // nama sandbox agar pembacaan progres bisa dilakukan sendiri.
     const sandboxId =
+      rawSandbox.sandbox?.name ??
       result.sandboxId ??
       rawSandbox.session?.sessionId ??
-      rawSandbox.sandbox?.id ??
       rawSandbox.sessionId ??
       "";
     if (!sandboxId) {
@@ -148,21 +147,53 @@ export async function getSandboxRenderProgress(
     throw new Error("Handle render tidak lengkap (sandboxId/commandId kosong)");
   }
 
-  const progress = await getRenderProgress({
-    sandboxId: handle.sandboxId,
-    cmdId: handle.commandId,
-  });
-  const overall = "overallProgress" in progress ? progress.overallProgress : 0;
+  let sandbox: Sandbox;
+  try {
+    sandbox = await Sandbox.get({ name: handle.sandboxId });
+  } catch {
+    return { progress: 0, done: true, error: "Sandbox render kedaluwarsa" };
+  }
+
+  let command: Awaited<ReturnType<Sandbox["getCommand"]>>;
+  try {
+    command = await sandbox.getCommand(handle.commandId);
+  } catch (error) {
+    return {
+      progress: 0,
+      done: true,
+      error: error instanceof Error ? error.message : "Gagal membaca perintah render",
+    };
+  }
+
+  const buffer = await sandbox
+    .readFileToBuffer({ path: "/vercel/sandbox/progress.json" })
+    .catch(() => null);
+
+  if (!buffer) {
+    if (command.exitCode !== null && command.exitCode !== 0) {
+      return { progress: 100, done: true, error: "Render gagal sebelum progres tercatat" };
+    }
+    return { progress: 0, done: false };
+  }
+
+  let payload: { stage?: string; overallProgress?: number; message?: string };
+  try {
+    payload = JSON.parse(buffer.toString("utf8")) as typeof payload;
+  } catch {
+    return { progress: 0, done: true, error: "File progres render rusak" };
+  }
+
+  const overall = typeof payload.overallProgress === "number" ? payload.overallProgress : 0;
   const percent = Math.max(0, Math.min(100, Math.round(overall * 100)));
 
-  if (progress.stage === "done") {
+  if (command.exitCode !== null && command.exitCode !== 0) {
+    return { progress: percent, done: true, error: payload.message ?? "Render gagal" };
+  }
+  if (payload.stage === "done") {
     return { progress: 100, done: true };
   }
-  if (progress.stage === "error") {
-    return { progress: percent, done: true, error: progress.message };
-  }
-  if (progress.stage === "expired") {
-    return { progress: 0, done: true, error: "Sandbox render kedaluwarsa" };
+  if (payload.stage === "error") {
+    return { progress: percent, done: true, error: payload.message ?? "Render gagal" };
   }
   return { progress: percent, done: false };
 }
