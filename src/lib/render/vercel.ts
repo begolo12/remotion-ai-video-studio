@@ -98,6 +98,9 @@ export async function startSandboxRender(input: {
 
   try {
     const sandbox = await createSandbox();
+    // @remotion/vercel tidak membuat direktori akar bundle sebelum menyalin;
+    // tanpa ini mkDir("remotion-bundle/public") gagal karena induknya belum ada.
+    await sandbox.mkDir("remotion-bundle");
     await addBundleToSandbox({ sandbox, bundleDir: dir });
 
     const result = await renderMediaOnVercel({
