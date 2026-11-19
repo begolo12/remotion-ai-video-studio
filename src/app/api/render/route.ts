@@ -1,11 +1,12 @@
 import { after, NextResponse } from "next/server";
 import { AccessError, ensurePersonalWorkspace, requireUser } from "@/lib/auth/access";
-import { enqueueRenderJob, failRenderJob, updateRenderJob } from "@/lib/jobs/queue";
+import { completeRenderJob, enqueueRenderJob, failRenderJob, updateRenderJob } from "@/lib/jobs/queue";
 import type { RenderJobRecord } from "@/lib/jobs/types";
 import { checkExportReadiness } from "@/lib/render/checklist";
 import { startSandboxRender } from "@/lib/render/vercel";
 import { getStoredProject } from "@/lib/projects/service";
 import { renderRequestSchema } from "@/lib/plan/schema";
+import { publicAssetUrl } from "@/lib/storage/blob";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -97,13 +98,25 @@ export async function POST(request: Request) {
           serveUrl,
           blobPathPrefix: `projects/${stored.id}`,
         });
-        await updateRenderJob(jobId, {
-          status: "rendering",
-          stage: "rendering",
-          sandboxId: handle.sandboxId,
-          commandId: handle.commandId,
-          startedAt: new Date(),
-        });
+        if (handle.stored) {
+          await completeRenderJob(jobId, [
+            {
+              artifactType: "mp4",
+              storageKey: handle.stored.storageKey,
+              url: publicAssetUrl(handle.stored.storageKey),
+              mimeType: "video/mp4",
+              fileSize: handle.stored.size,
+            },
+          ]);
+        } else {
+          await updateRenderJob(jobId, {
+            status: "rendering",
+            stage: "rendering",
+            sandboxId: handle.sandboxId,
+            commandId: handle.commandId,
+            startedAt: new Date(),
+          });
+        }
       } catch (error) {
         await failRenderJob(jobId, {
           code: "REMOTION_RENDER_FAILED",

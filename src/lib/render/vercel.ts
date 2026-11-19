@@ -5,7 +5,12 @@ import { addBundleToSandbox, createSandbox, renderMediaOnVercel } from "@remotio
 import type { VideoPlan } from "@/lib/plan/schema";
 import { normalizeKey, putObject, storageRoot, type StoredObject } from "@/lib/storage/blob";
 
-export type RenderHandle = { sandboxId: string; commandId: string; outputFile: string };
+export type RenderHandle = {
+  sandboxId: string;
+  commandId: string;
+  outputFile: string;
+  stored?: StoredObject;
+};
 export type RenderProgressInfo = { progress: number; done: boolean; error?: string };
 
 function localRenderKey(jobId: string): string {
@@ -101,8 +106,8 @@ export async function startSandboxRender(input: {
     await sandbox.mkDir("remotion-bundle");
     await addBundleToSandbox({ sandbox, bundleDir: dir });
 
-    // @ts-expect-error Tipe @remotion/vercel mengharuskan vercelBlob untuk mode
-    // detached, tetapi runtime menerima null dan MP4 diambil manual dari sandbox.
+    // Mode non-detached tidak memerlukan vercelBlob. Render berjalan penuh di
+    // dalam `after()`, lalu MP4 diambil dari sandbox dan ditulis ke storage lokal.
     const result = await renderMediaOnVercel({
       sandbox,
       compositionId,
@@ -114,8 +119,21 @@ export async function startSandboxRender(input: {
       },
       codec: "h264",
       crf: 18,
-      detached: true,
-      ...(timeout !== undefined ? { detachedSandboxTimeoutInMilliseconds: timeout } : {}),
+      outputFile: "/tmp/video.mp4",
+    });
+
+    const outputFile = result.sandboxFilePath || "/tmp/video.mp4";
+    const buffer = await sandbox
+      .readFileToBuffer({ path: outputFile })
+      .catch(() => null);
+    if (!buffer || buffer.byteLength < 1024) {
+      throw new Error("MP4 hasil render tidak ditemukan di sandbox");
+    }
+    const stored = await putObject({
+      data: buffer,
+      filename: localRenderKey(input.jobId),
+      contentType: "video/mp4",
+      access: "public",
     });
 
     const rawSandbox = sandbox as unknown as {
@@ -123,19 +141,11 @@ export async function startSandboxRender(input: {
       session?: { sessionId?: string };
       sandbox?: { name?: string; id?: string };
     };
-    // `getRenderProgress` dari @remotion/vercel memanggil Sandbox.get({sandboxId}),
-    // tetapi versi @vercel/sandbox yang terpasang mengharapkan `name`. Simpan
-    // nama sandbox agar pembacaan progres bisa dilakukan sendiri.
     const sandboxId =
-      rawSandbox.sandbox?.name ??
-      result.sandboxId ??
-      rawSandbox.session?.sessionId ??
-      rawSandbox.sessionId ??
-      "";
-    if (!sandboxId) {
-      throw new Error("Render sandbox tidak mengembalikan sandboxId");
-    }
-    return { sandboxId, commandId: result.cmdId, outputFile: result.outputFile };
+      rawSandbox.sandbox?.name ?? rawSandbox.session?.sessionId ?? rawSandbox.sessionId ?? "";
+    void timeout;
+    await sandbox.stop().catch(() => undefined);
+    return { sandboxId, commandId: "", outputFile, stored };
   } catch (error) {
     const region = process.env.VERCEL_REGION || "default";
     const detail = error instanceof Error ? error.message : String(error);
