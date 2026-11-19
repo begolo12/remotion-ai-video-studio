@@ -99,12 +99,15 @@ export function checkExportReadiness(
     );
 
     const refs = Array.isArray(scene?.assetRefs) ? scene.assetRefs : [];
+    const refsValid = refs.every((ref) => typeof ref === "string" && ref.trim().length > 0);
+    // Scene tanpa aset eksternal sah karena renderer punya ilustrasi SVG bawaan.
     result.push(
       check(
         "ASSET_REFS",
-        `Referensi aset scene ${sceneId} terisi semua`,
-        refs.length > 0 && refs.every((ref) => typeof ref === "string" && ref.trim().length > 0),
-        "error",
+        `Referensi aset scene ${sceneId} valid`,
+        refsValid,
+        "warning",
+        refs.length === 0 ? "memakai ilustrasi bawaan" : undefined,
       ),
     );
   }

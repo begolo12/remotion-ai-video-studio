@@ -100,6 +100,14 @@ describe("checkExportReadiness", () => {
     });
   });
 
+  it("mengizinkan scene tanpa aset eksternal karena ada ilustrasi bawaan", () => {
+    const checks = checkExportReadiness(plan([scene({ assetRefs: [] })]), { narration });
+    expect(checks.find((c) => c.code === "ASSET_REFS")).toMatchObject({
+      passed: true,
+      severity: "warning",
+    });
+  });
+
   it("menolak scene berdurasi di bawah 2 detik", () => {
     const checks = checkExportReadiness(plan([scene({ durationSeconds: 1 })]), { narration });
     expect(checks.find((c) => c.code === "SCENE_DURATION")?.passed).toBe(false);
