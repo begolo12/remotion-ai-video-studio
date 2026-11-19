@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { AccessError, ensurePersonalWorkspace, requireUser } from "@/lib/auth/access";
 import { enqueueRenderJob, failRenderJob, updateRenderJob } from "@/lib/jobs/queue";
 import type { RenderJobRecord } from "@/lib/jobs/types";
@@ -8,7 +8,7 @@ import { getStoredProject } from "@/lib/projects/service";
 import { renderRequestSchema } from "@/lib/plan/schema";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type LegacyStatus = "queued" | "rendering" | "done" | "error";
 
@@ -57,13 +57,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Project tidak ditemukan" }, { status: 404 });
     }
 
-    const checks = checkExportReadiness(stored.planV2, { narration: { enabled: true, scenes: stored.plan.scenes.length } });
+    const checks = checkExportReadiness(stored.planV2, {
+      narration: { enabled: true, scenes: stored.plan.scenes.length },
+    });
     const blockers = checks.filter((check) => !check.passed && check.severity === "error");
     if (blockers.length > 0) {
       return NextResponse.json(
         {
           error: "Project belum siap dirender",
-          issues: blockers.map((check) => ({ path: check.code, message: `${check.label}: ${check.detail ?? ""}` })),
+          issues: blockers.map((check) => ({
+            path: check.code,
+            message: `${check.label}: ${check.detail ?? ""}`,
+          })),
         },
         { status: 422 },
       );
@@ -76,34 +81,38 @@ export async function POST(request: Request) {
       requestedBy: user.id,
     });
 
-    try {
-      const serveUrl = process.env.RENDER_SERVE_URL ?? new URL(request.url).origin;
-      const handle = await startSandboxRender({
-        jobId: job.id,
-        projectId: stored.id,
-        plan: stored.plan,
-        serveUrl,
-        blobPathPrefix: `projects/${stored.id}`,
-      });
-      await updateRenderJob(job.id, {
-        status: "rendering",
-        stage: "rendering",
-        sandboxId: handle.sandboxId,
-        commandId: handle.commandId,
-        startedAt: new Date(),
-      });
-      return NextResponse.json({ job: toLegacyJob({ ...job, status: "rendering" as never }) });
-    } catch (renderError) {
-      await failRenderJob(job.id, {
-        code: "REMOTION_RENDER_FAILED",
-        message: renderError instanceof Error ? renderError.message : String(renderError),
-      });
-      const failed = await import("@/lib/jobs/queue").then((m) => m.getRenderJob(job.id));
-      return NextResponse.json(
-        { job: toLegacyJob(failed ?? job), error: "Render gagal dimulai" },
-        { status: 202 },
-      );
-    }
+    const serveUrl = process.env.RENDER_SERVE_URL ?? new URL(request.url).origin;
+    const plan = stored.plan;
+    const jobId = job.id;
+
+    // Pembuatan sandbox tidak boleh menghalangi response. Kita kembalikan job
+    // segera lalu lanjutkan di background sehingga tidak kena batas request.
+    after(async () => {
+      try {
+        await updateRenderJob(jobId, { status: "preparing", stage: "preparing" });
+        const handle = await startSandboxRender({
+          jobId,
+          projectId: stored.id,
+          plan,
+          serveUrl,
+          blobPathPrefix: `projects/${stored.id}`,
+        });
+        await updateRenderJob(jobId, {
+          status: "rendering",
+          stage: "rendering",
+          sandboxId: handle.sandboxId,
+          commandId: handle.commandId,
+          startedAt: new Date(),
+        });
+      } catch (error) {
+        await failRenderJob(jobId, {
+          code: "REMOTION_RENDER_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+
+    return NextResponse.json({ job: toLegacyJob(job) }, { status: 202 });
   } catch (error) {
     const status = error instanceof AccessError ? error.status : 500;
     return NextResponse.json(
