@@ -119,8 +119,17 @@ export async function startSandboxRender(input: {
       ...(timeout !== undefined ? { detachedSandboxTimeoutInMilliseconds: timeout } : {}),
     });
 
+    const rawSandbox = sandbox as unknown as {
+      sessionId?: string;
+      session?: { sessionId?: string };
+      sandbox?: { id?: string };
+    };
     const sandboxId =
-      result.sandboxId ?? (sandbox as unknown as { sessionId?: string }).sessionId ?? "";
+      result.sandboxId ??
+      rawSandbox.session?.sessionId ??
+      rawSandbox.sandbox?.id ??
+      rawSandbox.sessionId ??
+      "";
     if (!sandboxId) {
       throw new Error("Render sandbox tidak mengembalikan sandboxId");
     }
