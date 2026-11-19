@@ -163,6 +163,49 @@ export const publishingSchema = z.object({
   thumbnailText: TRIMMED(60),
 });
 
+/**
+ * Model sering mengirim catatan kualitas dengan nama field lain (`type`,
+ * `text`, `level`). Normalisasi di sini mencegah seluruh storyboard ditolak
+ * hanya karena satu catatan kualitas tidak sesuai format.
+ */
+const normalizeQuality = (value: unknown): unknown[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const raw = item as Record<string, unknown>;
+      const code =
+        typeof raw.code === "string"
+          ? raw.code
+          : typeof raw.issue === "string"
+            ? raw.issue
+            : typeof raw.type === "string"
+              ? raw.type
+              : undefined;
+      const message =
+        typeof raw.message === "string"
+          ? raw.message
+          : typeof raw.text === "string"
+            ? raw.text
+            : typeof raw.detail === "string"
+              ? raw.detail
+              : undefined;
+      if (!code || !message) return null;
+      const rawSeverity = raw.severity ?? raw.level ?? raw.type;
+      const severity =
+        rawSeverity === "error" || rawSeverity === "warning" || rawSeverity === "info"
+          ? rawSeverity
+          : "info";
+      return {
+        code: code.slice(0, 80),
+        severity,
+        message: message.slice(0, 400),
+        ...(typeof raw.sceneId === "string" ? { sceneId: raw.sceneId } : {}),
+      };
+    })
+    .filter((item) => item !== null) as QualityIssue[];
+};
+
 export const planV2Schema: z.ZodType<PlanV2> = z.object({
   schemaVersion: z.literal(2),
   id: TRIMMED(120),
@@ -180,7 +223,7 @@ export const planV2Schema: z.ZodType<PlanV2> = z.object({
   scenes: z.array(v2SceneSchema).min(1).max(16),
   outro: z.object({ heading: TRIMMED(90), cta: TRIMMED(120) }),
   publishing: publishingSchema,
-  quality: z.array(qualityIssueSchema).default([]),
+  quality: z.preprocess(normalizeQuality, z.array(qualityIssueSchema).default([])),
   createdAt: TRIMMED(60),
   updatedAt: TRIMMED(60),
 });

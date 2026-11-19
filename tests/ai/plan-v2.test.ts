@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isLegacyPlan, isPlanV2, normalizePlan } from "@/lib/plan/migrate";
 import { planSchema, type VideoPlan } from "@/lib/plan/schema";
-import { createEmptyPlanV2, fromLegacyPlan, toLegacyPlan } from "@/lib/plan/v2";
+import { createEmptyPlanV2, fromLegacyPlan, planV2Schema, toLegacyPlan } from "@/lib/plan/v2";
 
 const legacy: VideoPlan = {
   version: 1,
@@ -42,6 +42,25 @@ describe("konversi VideoPlan v2 <-> v1", () => {
     expect(back.hook).toBe("Hook asli?");
     expect(back.styleId).toBe("neon");
     expect(planSchema.safeParse(back).success).toBe(true);
+  });
+
+  it("quality dengan nama field berbeda tetap dinormalisasi", () => {
+    const plan = createEmptyPlanV2({ prompt: "Ide uji", targetSeconds: 30, styleId: "cinematic" });
+    const raw = {
+      ...plan,
+      quality: [
+        { type: "caption", text: "Caption terlalu panjang", level: "warning" },
+        { code: "hook", severity: "error", message: "Hook lemah" },
+        { unknown: "dibuang" },
+      ],
+    };
+    const parsed = planV2Schema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.quality).toHaveLength(2);
+      expect(parsed.data.quality[0]).toMatchObject({ severity: "warning" });
+      expect(parsed.data.quality[1].code).toBe("hook");
+    }
   });
 
   it("normalizePlan menerima rencana v1 maupun v2", () => {
