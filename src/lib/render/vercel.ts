@@ -119,7 +119,12 @@ export async function startSandboxRender(input: {
       ...(timeout !== undefined ? { detachedSandboxTimeoutInMilliseconds: timeout } : {}),
     });
 
-    return { sandboxId: result.sandboxId, commandId: result.cmdId, outputFile: result.outputFile };
+    const sandboxId =
+      result.sandboxId ?? (sandbox as unknown as { sessionId?: string }).sessionId ?? "";
+    if (!sandboxId) {
+      throw new Error("Render sandbox tidak mengembalikan sandboxId");
+    }
+    return { sandboxId, commandId: result.cmdId, outputFile: result.outputFile };
   } catch (error) {
     const region = process.env.VERCEL_REGION || "default";
     const detail = error instanceof Error ? error.message : String(error);
