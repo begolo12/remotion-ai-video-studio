@@ -139,7 +139,7 @@ Tambahkan semua environment variable dari `.env.example` ke Environment Variable
 
 - region `sin1`
 - `maxDuration` untuk route AI dan render
-- cron `/api/cron/recover` setiap 5 menit
+- cron `/api/cron/recover` harian pukul 00.00 UTC (batas akun Vercel Hobby; upgrade ke Pro untuk interval lebih sering)
 - header keamanan dasar
 
 `RENDER_SERVE_URL` harus diisi dengan URL deployment yang dapat diakses publik, karena Vercel Sandbox perlu mengambil bundle Remotion dari URL tersebut.
