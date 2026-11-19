@@ -184,7 +184,9 @@ export async function getSandboxRenderProgress(
   }
 
   const overall = typeof payload.overallProgress === "number" ? payload.overallProgress : 0;
-  const percent = Math.max(0, Math.min(100, Math.round(overall * 100)));
+  // Beberapa versi Remotion menulis 0..1, lainnya 0..100.
+  const normalized = overall <= 1 ? overall * 100 : overall;
+  const percent = Math.max(0, Math.min(100, Math.round(normalized)));
 
   if (command.exitCode !== null && command.exitCode !== 0) {
     return { progress: percent, done: true, error: payload.message ?? "Render gagal" };
