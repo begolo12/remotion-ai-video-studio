@@ -1,0 +1,1 @@
+ALTER TABLE "project_revisions" ADD COLUMN "legacy_plan_json" jsonb;

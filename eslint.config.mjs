@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Bundle Remotion hasil `postbuild` bukan source code.
+    ".remotion/**",
+    "public/renders/**",
+    "public/audio/**",
+    "coverage/**",
+    "drizzle/**",
   ]),
 ]);
 

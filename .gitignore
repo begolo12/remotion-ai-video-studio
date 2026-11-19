@@ -32,6 +32,16 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# hasil kerja lokal
+/data/projects/
+/data/props/
+/public/renders/
+/public/audio/
+
+# generated remotion bundle (dibuat ulang oleh postbuild)
+/.remotion/
 
 # vercel
 .vercel
