@@ -24,7 +24,7 @@ Prinsip penting:
 
 - API key tidak pernah dikirim ke browser.
 - Project dan job disimpan di Neon, bukan filesystem Vercel.
-- Audio TTS, aset, dan MP4 disimpan di disk lokal (`STORAGE_DIR`). Di Vercel runtime memakai `/tmp`, jadi file tidak persisten antar-instance.
+- Audio TTS, aset, dan MP4 disimpan di disk lokal (`STORAGE_DIR`). Di Vercel runtime memakai `/tmp`, jadi file **tidak persisten antar-request**: MP4 bisa dibuat tetapi tautan unduh akan 404 setelah invocation berganti. Ini disepakati sebagai pengorbanan untuk tidak memakai Vercel Blob. Jalankan lokal dengan `STORAGE_DIR` permanen bila membutuhkan unduhan yang stabil.
 - Render berjalan detached di Vercel Sandbox, lalu di-polling.
 - AI hanya menghasilkan JSON; Remotion tidak menjalankan kode dari AI.
 

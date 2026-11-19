@@ -128,7 +128,7 @@ Prompt user
 ## Batasan yang perlu diketahui
 
 - Render membutuhkan Vercel Sandbox dan bundle Remotion yang dihasilkan `postbuild`.
-- File disimpan lokal. Di Vercel runtime memakai `/tmp`, jadi MP4/audio tidak persisten antar-instance; untuk produksi multi-instance sebaiknya gunakan storage objek.
+- File disimpan lokal. Di Vercel runtime memakai `/tmp`, jadi MP4/audio **tidak persisten antar-request**: render tetap berjalan, tetapi tautan unduh akan 404 setelah invocation berganti. Untuk penggunaan penuh, jalankan aplikasi secara lokal dengan `STORAGE_DIR` mengarah ke folder permanen. Ini adalah pilihan desain yang disepakati: tanpa Vercel Blob maupun penyimpanan objek lain.
 - Generator gambar/video belum terhubung; visual memakai ilustrasi SVG bawaan. Ajukan provider jika ingin aset generatif.
 - TTS bergantung pada ketersediaan Edge TTS dan jaringan.
 - Model `cx/gpt-6.2-sol` harus tersedia di akun InferHub Anda.
